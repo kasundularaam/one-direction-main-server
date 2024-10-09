@@ -1,0 +1,15 @@
+{
+  "state": "images_processed",
+  "directions": [
+    {
+      "direction": "right",
+      "speed": 200,
+      "duration": 1000
+    },
+    {
+      "direction": "forward",
+      "speed": 255,
+      "duration": 1000
+    }
+  ]
+}
