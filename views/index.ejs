@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>One Direction - Robot Camera View</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              neonPink: "#FF6EC7",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-gray-900 text-white h-screen flex flex-col overflow-hidden">
+    <header class="bg-gray-800 shadow-lg">
+      <div class="container mx-auto px-4 py-3">
+        <h1 class="text-2xl font-bold text-neonPink">One Direction</h1>
+      </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-2 flex flex-col">
+      <h2 class="text-xl font-semibold mb-2 text-neonPink">
+        Robot Camera View
+      </h2>
+      <div
+        class="flex-grow flex flex-col items-center justify-center bg-gray-800 rounded-lg shadow-xl p-4"
+      >
+        <img
+          id="uploadedImage"
+          src="/uploads/uploaded_image.jpg"
+          alt="Robot's camera view"
+          class="max-w-full max-h-[60vh] object-contain rounded-lg mb-4"
+        />
+        <div class="text-sm text-center">
+          <p class="mb-2">
+            One Direction is an innovative robot that navigates by following
+            arrows on the floor.
+          </p>
+          <p>
+            The image above shows the robot's current view. Watch as it
+            interprets and follows the directional cues!
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="bg-gray-800">
+      <div
+        class="container mx-auto px-4 py-2 text-center text-neonPink text-sm"
+      >
+        Navigating the future, one arrow at a time.
+      </div>
+    </footer>
+
+    <script>
+      const socket = io("/web");
+
+      socket.on("new_image", (data) => {
+        const img = document.getElementById("uploadedImage");
+        img.src = `/uploads/${data.filename}?t=${new Date().getTime()}`;
+      });
+    </script>
+  </body>
+</html>
