@@ -3,6 +3,9 @@ const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
 const fs = require("fs");
+
+const { saveFile, flipImage } = require("./image_utils");
+
 const { sendImagesToFastAPI } = require("./upload_images");
 
 const app = express();
@@ -17,6 +20,7 @@ app.set("views", path.join(__dirname, "views"));
 app.use(express.static("public"));
 
 const UPLOAD_FOLDER = path.join(__dirname, "public", "uploads");
+const TRAINING_FOLDER = path.join(__dirname, "public", "uploads", "train");
 const IMAGES_TO_PROCESS_FOLDER = path.join(
   __dirname,
   "public",
@@ -36,9 +40,73 @@ let collectedImagesCount = 0;
 let imageProcessState = ImageProcessState.WAITING_FOR_REQUEST;
 
 // Ensure upload folder exists
-if (!fs.existsSync(UPLOAD_FOLDER) || !fs.existsSync(IMAGES_TO_PROCESS_FOLDER)) {
+if (
+  !fs.existsSync(UPLOAD_FOLDER) ||
+  !fs.existsSync(IMAGES_TO_PROCESS_FOLDER) ||
+  !fs.existsSync(TRAINING_FOLDER)
+) {
   fs.mkdirSync(UPLOAD_FOLDER, { recursive: true });
   fs.mkdirSync(IMAGES_TO_PROCESS_FOLDER, { recursive: true });
+  fs.mkdirSync(TRAINING_FOLDER, { recursive: true });
+}
+
+let isCollectingForTraining = false;
+
+// Function to handle image collection
+async function handleImageCollection(body) {
+  try {
+    const filename = `${collectedImagesCount}.jpg`;
+    const filepath = path.join(IMAGES_TO_PROCESS_FOLDER, filename);
+
+    const flippedImageBuffer = await flipImage(body);
+
+    await saveFile(filepath, flippedImageBuffer);
+    collectedImagesCount++;
+
+    io.of("/web").emit("new_image", { path: `/uploads/process/${filename}` });
+
+    if (collectedImagesCount >= totalImagesCount) {
+      sendCollectedImages();
+    }
+
+    return "File uploaded successfully";
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+// Function to handle single image upload
+async function handleSingleImageUpload(body) {
+  try {
+    const filename = "uploaded_image.jpg";
+    const filepath = path.join(UPLOAD_FOLDER, filename);
+
+    const flippedImageBuffer = await flipImage(body);
+    await saveFile(filepath, flippedImageBuffer);
+
+    io.of("/web").emit("new_image", { path: `/uploads/${filename}` });
+
+    return "File uploaded successfully";
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+// Function to handle single image upload
+async function handleTrainingCollection(body) {
+  try {
+    const filename = `${Date.now()}.jpg`;
+    const filepath = path.join(TRAINING_FOLDER, filename);
+
+    const flippedImageBuffer = await flipImage(body);
+    await saveFile(filepath, flippedImageBuffer);
+
+    io.of("/web").emit("new_image", { path: `/uploads/train/${filename}` });
+
+    return "File uploaded successfully";
+  } catch (error) {
+    console.log(error);
+  }
 }
 
 // Socket.IO connection
@@ -50,51 +118,33 @@ io.of("/web").on("connection", (socket) => {
   });
 });
 
-// Route for uploading images
-app.post("/upload_image", (req, res) => {
+// Main route handler
+app.post("/upload_image", async (req, res) => {
   let body = [];
   req
     .on("data", (chunk) => {
       body.push(chunk);
     })
-    .on("end", () => {
+    .on("end", async () => {
       body = Buffer.concat(body);
 
-      if (
-        imageProcessState === ImageProcessState.COLLECTING_IMAGES &&
-        collectedImagesCount <= totalImagesCount
-      ) {
-        const filename = `${collectedImagesCount}.jpg`;
-        const filepath = path.join(IMAGES_TO_PROCESS_FOLDER, filename);
-
-        fs.writeFile(filepath, body, (err) => {
-          if (err) {
-            console.error("Error saving file:", err);
-            return res.status(500).send("Error saving file");
-          }
-
-          collectedImagesCount++;
-
-          if (collectedImagesCount >= totalImagesCount) {
-            sendCollectedImages();
-          }
-
-          return res.status(200).send("File uploaded successfully");
-        });
-      } else {
-        const filename = "uploaded_image.jpg";
-        const filepath = path.join(UPLOAD_FOLDER, filename);
-
-        fs.writeFile(filepath, body, (err) => {
-          if (err) {
-            console.error("Error saving file:", err);
-            return res.status(500).send("Error saving file");
-          }
-
-          io.of("/web").emit("new_image", { filename: filename });
-
-          res.status(200).send("File uploaded successfully");
-        });
+      try {
+        let result;
+        if (isCollectingForTraining) {
+          result = await handleTrainingCollection(body);
+          console.log(result);
+        } else if (
+          imageProcessState === ImageProcessState.COLLECTING_IMAGES &&
+          collectedImagesCount <= totalImagesCount
+        ) {
+          result = await handleImageCollection(body);
+        } else {
+          result = await handleSingleImageUpload(body);
+        }
+        res.status(200).send(result);
+      } catch (err) {
+        console.error("Error processing file:", err);
+        res.status(500).send("Error processing file");
       }
     });
 });
@@ -105,16 +155,21 @@ function sendCollectedImages() {
   sendImagesToFastAPI(IMAGES_TO_PROCESS_FOLDER)
     .then((value) => {
       imageProcessState = ImageProcessState.IMAGES_PROCESSED;
-      console.log(value);
     })
     .catch((error) => {
       imageProcessState = ImageProcessState.IMAGES_PROCESSED;
-      console.error(error);
     });
 }
 
 app.get("/directions", (req, res) => {
   console.log(imageProcessState.description);
+
+  if (isCollectingForTraining) {
+    return res.status(200).json({
+      state: "under_development",
+      directions: [],
+    });
+  }
 
   if (imageProcessState === ImageProcessState.WAITING_FOR_REQUEST) {
     imageProcessState = ImageProcessState.COLLECTING_IMAGES;

@@ -4,8 +4,6 @@ const axios = require("axios");
 const FormData = require("form-data");
 
 async function sendImagesToFastAPI(directoryPath) {
-  console.log(directoryPath);
-
   const fastAPIEndpoint = "http://localhost:8000/process_images/";
   const form = new FormData();
 
@@ -38,11 +36,13 @@ async function sendImagesToFastAPI(directoryPath) {
       maxBodyLength: Infinity,
     });
 
-    console.log("FastAPI Response:", response.data);
     return response.data;
   } catch (error) {
-    console.error("Error sending images to FastAPI:", error);
-    throw error;
+    console.error(
+      "UPLOAD_IMAGES",
+      "failed to upload images to image processing server!"
+    );
+    throw "Failed to upload images";
   }
 }
 
