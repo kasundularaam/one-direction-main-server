@@ -4,9 +4,17 @@ const socketIo = require("socket.io");
 const path = require("path");
 const fs = require("fs");
 
-const { saveFile, flipImage } = require("./image_utils");
+const { saveFile, flipImage } = require("./utils/image_util");
 
-const { sendImagesToFastAPI } = require("./upload_images");
+const { sendImageToProcess } = require("./services/image_process_service");
+
+const { ImageProcessState } = require("./constants/ImageProcessState");
+const {
+  initDirectories,
+  DIR_UPLOAD,
+  DIR_TRAIN,
+  DIR_PROCESS,
+} = require("./utils/directory_util");
 
 const app = express();
 const server = http.createServer(app);
@@ -19,89 +27,43 @@ app.set("views", path.join(__dirname, "views"));
 // Serve static files from the 'public' directory
 app.use(express.static("public"));
 
-const UPLOAD_FOLDER = path.join(__dirname, "public", "uploads");
-const TRAINING_FOLDER = path.join(__dirname, "public", "uploads", "train");
-const IMAGES_TO_PROCESS_FOLDER = path.join(
-  __dirname,
-  "public",
-  "uploads",
-  "process"
-);
+//==============================M-A-I-N-S-R-V-E-R====================================
 
-const ImageProcessState = Object.freeze({
-  WAITING_FOR_REQUEST: Symbol("waiting_for_request"),
-  COLLECTING_IMAGES: Symbol("collecting_images"),
-  PROCESSING_IMAGES: Symbol("processing_images"),
-  IMAGES_PROCESSED: Symbol("images_processed"),
-});
-
-const totalImagesCount = 10;
-let collectedImagesCount = 0;
 let imageProcessState = ImageProcessState.WAITING_FOR_REQUEST;
 
-// Ensure upload folder exists
-if (
-  !fs.existsSync(UPLOAD_FOLDER) ||
-  !fs.existsSync(IMAGES_TO_PROCESS_FOLDER) ||
-  !fs.existsSync(TRAINING_FOLDER)
-) {
-  fs.mkdirSync(UPLOAD_FOLDER, { recursive: true });
-  fs.mkdirSync(IMAGES_TO_PROCESS_FOLDER, { recursive: true });
-  fs.mkdirSync(TRAINING_FOLDER, { recursive: true });
-}
+initDirectories();
 
 let isCollectingForTraining = false;
 
-// Function to handle image collection
-async function handleImageCollection(body) {
+function getSaveFilePath() {
+  if (imageProcessState === ImageProcessState.COLLECTING_IMAGE) {
+    return path.join(DIR_PROCESS, "image_to_process.jpg");
+  }
+  if (isCollectingForTraining) {
+    return path.join(DIR_TRAIN, `${Date.now()}.jpg`);
+  }
+  return path.join(DIR_UPLOAD, "uploaded_image.jpg");
+}
+
+async function handleUploadImageReq(body) {
   try {
-    const filename = `${collectedImagesCount}.jpg`;
-    const filepath = path.join(IMAGES_TO_PROCESS_FOLDER, filename);
+    const filePath = getSaveFilePath();
 
     const flippedImageBuffer = await flipImage(body);
+    await saveFile(filePath, flippedImageBuffer);
 
-    await saveFile(filepath, flippedImageBuffer);
-    collectedImagesCount++;
+    io.of("/web").emit("new_image", { path: filePath });
 
-    io.of("/web").emit("new_image", { path: `/uploads/process/${filename}` });
-
-    if (collectedImagesCount >= totalImagesCount) {
-      sendCollectedImages();
+    if (imageProcessState === ImageProcessState.COLLECTING_IMAGE) {
+      imageProcessState = ImageProcessState.PROCESSING_IMAGES;
+      sendImageToProcess(filePath)
+        .then((res) => {
+          imageProcessState = ImageProcessState.IMAGES_PROCESSED;
+        })
+        .catch((error) => {
+          imageProcessState = ImageProcessState.IMAGES_PROCESSED;
+        });
     }
-
-    return "File uploaded successfully";
-  } catch (error) {
-    console.log(error);
-  }
-}
-
-// Function to handle single image upload
-async function handleSingleImageUpload(body) {
-  try {
-    const filename = "uploaded_image.jpg";
-    const filepath = path.join(UPLOAD_FOLDER, filename);
-
-    const flippedImageBuffer = await flipImage(body);
-    await saveFile(filepath, flippedImageBuffer);
-
-    io.of("/web").emit("new_image", { path: `/uploads/${filename}` });
-
-    return "File uploaded successfully";
-  } catch (error) {
-    console.log(error);
-  }
-}
-
-// Function to handle single image upload
-async function handleTrainingCollection(body) {
-  try {
-    const filename = `${Date.now()}.jpg`;
-    const filepath = path.join(TRAINING_FOLDER, filename);
-
-    const flippedImageBuffer = await flipImage(body);
-    await saveFile(filepath, flippedImageBuffer);
-
-    io.of("/web").emit("new_image", { path: `/uploads/train/${filename}` });
 
     return "File uploaded successfully";
   } catch (error) {
@@ -129,18 +91,8 @@ app.post("/upload_image", async (req, res) => {
       body = Buffer.concat(body);
 
       try {
-        let result;
-        if (isCollectingForTraining) {
-          result = await handleTrainingCollection(body);
-          console.log(result);
-        } else if (
-          imageProcessState === ImageProcessState.COLLECTING_IMAGES &&
-          collectedImagesCount <= totalImagesCount
-        ) {
-          result = await handleImageCollection(body);
-        } else {
-          result = await handleSingleImageUpload(body);
-        }
+        const result = await handleUploadImageReq(body);
+
         res.status(200).send(result);
       } catch (err) {
         console.error("Error processing file:", err);
@@ -148,18 +100,6 @@ app.post("/upload_image", async (req, res) => {
       }
     });
 });
-
-function sendCollectedImages() {
-  imageProcessState = ImageProcessState.PROCESSING_IMAGES;
-  collectedImagesCount = 0;
-  sendImagesToFastAPI(IMAGES_TO_PROCESS_FOLDER)
-    .then((value) => {
-      imageProcessState = ImageProcessState.IMAGES_PROCESSED;
-    })
-    .catch((error) => {
-      imageProcessState = ImageProcessState.IMAGES_PROCESSED;
-    });
-}
 
 app.get("/directions", (req, res) => {
   console.log(imageProcessState.description);
@@ -172,7 +112,7 @@ app.get("/directions", (req, res) => {
   }
 
   if (imageProcessState === ImageProcessState.WAITING_FOR_REQUEST) {
-    imageProcessState = ImageProcessState.COLLECTING_IMAGES;
+    imageProcessState = ImageProcessState.COLLECTING_IMAGE;
   }
 
   if (imageProcessState === ImageProcessState.IMAGES_PROCESSED) {
