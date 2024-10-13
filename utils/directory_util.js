@@ -1,6 +1,12 @@
-const DIR_UPLOAD = path.join(__dirname, "public", "uploads");
-const DIR_TRAIN = path.join(__dirname, "public", "uploads", "train");
-const DIR_PROCESS = path.join(__dirname, "public", "uploads", "process");
+const path = require("path");
+const fs = require("fs");
+
+// Assuming this file is in the /utils directory, we need to go up one level to reach the root
+const ROOT_DIR = path.join(__dirname, "..");
+
+const DIR_UPLOAD = path.join(ROOT_DIR, "public", "uploads");
+const DIR_TRAIN = path.join(ROOT_DIR, "public", "uploads", "train");
+const DIR_PROCESS = path.join(ROOT_DIR, "public", "uploads", "process");
 
 function initDirectories() {
   if (
@@ -15,8 +21,8 @@ function initDirectories() {
 }
 
 module.exports = {
+  initDirectories,
   DIR_UPLOAD,
   DIR_TRAIN,
   DIR_PROCESS,
-  initDirectories,
 };

@@ -29,11 +29,14 @@ app.use(express.static("public"));
 
 //==============================M-A-I-N-S-R-V-E-R====================================
 
-let imageProcessState = ImageProcessState.WAITING_FOR_REQUEST;
-
+//Init directories
 initDirectories();
 
+let imageProcessState = ImageProcessState.WAITING_FOR_REQUEST;
+
 let isCollectingForTraining = false;
+
+let predictedDirection = "stop";
 
 function getSaveFilePath() {
   if (imageProcessState === ImageProcessState.COLLECTING_IMAGE) {
@@ -58,9 +61,11 @@ async function handleUploadImageReq(body) {
       imageProcessState = ImageProcessState.PROCESSING_IMAGES;
       sendImageToProcess(filePath)
         .then((res) => {
+          predictedDirection = res.direction;
           imageProcessState = ImageProcessState.IMAGES_PROCESSED;
         })
         .catch((error) => {
+          predictedDirection = "stop";
           imageProcessState = ImageProcessState.IMAGES_PROCESSED;
         });
     }
@@ -101,8 +106,33 @@ app.post("/upload_image", async (req, res) => {
     });
 });
 
+const isTesting = false;
+
 app.get("/directions", (req, res) => {
   console.log(imageProcessState.description);
+
+  if (isTesting) {
+    return res.status(200).json({
+      state: ImageProcessState.IMAGES_PROCESSED.description,
+      directions: [
+        {
+          direction: "forward",
+          speed: 225,
+          duration: 100,
+        },
+        {
+          direction: "left",
+          speed: 225,
+          duration: 500,
+        },
+        {
+          direction: "forward",
+          speed: 225,
+          duration: 100,
+        },
+      ],
+    });
+  }
 
   if (isCollectingForTraining) {
     return res.status(200).json({
@@ -119,7 +149,13 @@ app.get("/directions", (req, res) => {
     imageProcessState = ImageProcessState.WAITING_FOR_REQUEST;
     return res.status(200).json({
       state: ImageProcessState.IMAGES_PROCESSED.description,
-      directions: [],
+      directions: [
+        {
+          direction: predictedDirection,
+          speed: 200,
+          duration: 200,
+        },
+      ],
     });
   }
 

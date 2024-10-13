@@ -1,15 +1,35 @@
-{
-  "state": "images_processed",
-  "directions": [
-    {
-      "direction": "right",
-      "speed": 200,
-      "duration": 1000
-    },
-    {
-      "direction": "forward",
-      "speed": 255,
-      "duration": 1000
-    }
-  ]
-}
+[
+  {
+    "state": "images_processed",
+    "directions": [
+      {
+        "direction": "right",
+        "speed": 200,
+        "duration": 1000
+      },
+      {
+        "direction": "forward",
+        "speed": 255,
+        "duration": 1000
+      }
+    ]
+  },
+
+  {
+    "state": "images_processed",
+    "directions": [
+      {
+        "isForward": true,
+        "left": 0,
+        "right": 200,
+        "duration": 1000
+      },
+      {
+        "isForward": true,
+        "left": 200,
+        "right": 200,
+        "duration": 1000
+      }
+    ]
+  }
+]
