@@ -64,6 +64,8 @@
       const socket = io("/web");
 
       socket.on("new_image", (data) => {
+        console.log(data.path);
+
         const img = document.getElementById("uploadedImage");
         img.src = `${data.path}?t=${new Date().getTime()}`;
       });

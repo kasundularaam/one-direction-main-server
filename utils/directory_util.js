@@ -20,9 +20,16 @@ function initDirectories() {
   }
 }
 
+function getPublicUrl(filePath) {
+  // Convert absolute file path to URL path
+  const relativePath = path.relative(path.join(ROOT_DIR, "public"), filePath);
+  return "/" + relativePath.split(path.sep).join("/");
+}
+
 module.exports = {
   initDirectories,
   DIR_UPLOAD,
   DIR_TRAIN,
   DIR_PROCESS,
+  getPublicUrl,
 };
